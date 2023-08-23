@@ -3,7 +3,7 @@ const fs = require('fs').promises;
 const app = express();
 const { v4: uuidv4 } = require('uuid');
 
-const PORT = 6900;
+const PORT = process.env.PORT || 9876;
 const RED = 'red';
 const GREEN = 'green';
 const BLUE = 'blue';
@@ -88,13 +88,8 @@ const refreshChannel = async (channel, newSource = null) => {
     try {
       const clientManifestPath = `${__dirname}/hls-manifest/client`;
       const clientManifestFiles = await fs.readdir(clientManifestPath);
-      console.log('clientManifestFiles:');
-      console.log(clientManifestFiles);
       for (const filename of clientManifestFiles) {
-        console.log('filename:');
-        console.log(filename);
         if (!filename.startsWith(channel)) continue;
-        console.log('unlinking...');
         fs.unlink(`${clientManifestPath}/${filename}`); // async
       }
     } catch (err) {
