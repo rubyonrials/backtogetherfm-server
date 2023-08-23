@@ -1,2 +1,5 @@
 node_modules
 hls-manifest/client/*
+
+!hls-manifest/client
+!hls-manifest/client/.gitkeep
