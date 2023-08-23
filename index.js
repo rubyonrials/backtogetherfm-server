@@ -88,8 +88,13 @@ const refreshChannel = async (channel, newSource = null) => {
     try {
       const clientManifestPath = `${__dirname}/hls-manifest/client`;
       const clientManifestFiles = await fs.readdir(clientManifestPath);
+      console.log('clientManifestFiles:');
+      console.log(clientManifestFiles);
       for (const filename of clientManifestFiles) {
+        console.log('filename:');
+        console.log(filename);
         if (!filename.startsWith(channel)) continue;
+        console.log('unlinking...');
         fs.unlink(`${clientManifestPath}/${filename}`); // async
       }
     } catch (err) {
