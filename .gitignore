@@ -1,3 +1,2 @@
 node_modules
-hls-data
-hls-manifest
+hls-manifest/client/*
