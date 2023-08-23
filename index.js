@@ -14,6 +14,12 @@ app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, ngrok-skip-browser-warning');
   res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+
+  if (req.url.endsWith('.ts')) {
+    // Set the file to be cached for 1 day (86400 seconds)
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+  }
+
   next();
 });
 
@@ -100,6 +106,8 @@ const refreshChannel = async (channel, newSource = null) => {
   clearOldClientManifests(channel); // async
 };
 
+// NEW METHOD: every 10 seconds, check current streams. if any are expired, refresh them.
+
 // Return the channel names that are streamable as an array.
 // A channel is streamable if it's playbackTimer is not null (not yet started broadcast) or expired
 app.get('/getStreamableChannels', (req, res) => {
@@ -173,8 +181,8 @@ app.use(express.static('hls-data'));
 app.use(express.static('hls-manifest/client'));
 
 app.listen(PORT, () => {
-  refreshChannel(RED, 'i_o.m3u8'); // can move source-chooser to method
-  refreshChannel(GREEN, 'ladiesnight.m3u8'); // can move source-chooser to method
-  refreshChannel(BLUE, 'imgood.m3u8'); // can move source-chooser to method
+  refreshChannel(RED, 'bassinfusion.m3u8'); // can move source-chooser to method
+  refreshChannel(GREEN, 'set1.m3u8'); // can move source-chooser to method
+  refreshChannel(BLUE, 'set1.m3u8'); // can move source-chooser to method
   console.log(`Server is listening on port ${PORT}.`);
 });
