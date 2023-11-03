@@ -182,7 +182,7 @@ app.use(express.static('hls-manifest/client'));
 
 app.listen(PORT, () => {
   refreshChannel(RED, 'bassinfusion.m3u8'); // can move source-chooser to method
-  refreshChannel(GREEN, 'set1.m3u8'); // can move source-chooser to method
-  refreshChannel(BLUE, 'set1.m3u8'); // can move source-chooser to method
+  // refreshChannel(GREEN, 'set1.m3u8'); // can move source-chooser to method
+  // refreshChannel(BLUE, 'set1.m3u8'); // can move source-chooser to method
   console.log(`Server is listening on port ${PORT}.`);
 });
