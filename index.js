@@ -7,6 +7,9 @@ const PORT = process.env.PORT || 9876;
 const RED = 'red';
 const GREEN = 'green';
 const BLUE = 'blue';
+const YELLOW = 'yellow';
+const STATIC = 'STATIC';
+const LIVESTREAM = 'LIVESTREAM';
 const ERROR_DELIMITER = ':::';
 
 // Middleware to set CORS headers
@@ -23,26 +26,113 @@ app.use((req, res, next) => {
   next();
 });
 
-let broadcasts = {
-  [ RED ]: {
-    source: null,
-    playbackTimer: null,
-    duration: null,
-    // TODO livestream: false
-  },
-  [ GREEN ]: {
-    source: null,
-    playbackTimer: null,
-    duration: null,
-    // TODO livestream: false
-  },
-  [ BLUE ]: {
-    source: null,
-    playbackTimer: null,
-    duration: null,
-    // TODO livestream: false
-  }
-}; // TODO this should probably be a class, with instantiated broadcasts, with types that can be checked. refreshCHannel is really initialize, and initializes the instance variables
+// let broadcasts = {
+//   [ RED ]: {
+//     source: null,
+//     playbackTimer: null,
+//     duration: null,
+//     // TODO livestream: false
+//   },
+//   [ GREEN ]: {
+//     source: null,
+//     playbackTimer: null,
+//     duration: null,
+//     // TODO livestream: false
+//   },
+//   [ BLUE ]: {
+//     source: null,
+//     playbackTimer: null,
+//     duration: null,
+//     // TODO livestream: false
+//   }
+// }; // TODO this should probably be a class, with instantiated broadcasts, with types that can be checked. refreshCHannel is really initialize, and initializes the instance variables
+
+// TODO: Eventually we will send color information to the client, when there are multiple channels available at once again
+const COLOR_MAP = {
+	[ YELLOW ]: {
+		colorOpaque:'#ffb100ba',
+		colorTransparent:'#ffb10042'
+	},
+	[ RED ]: {
+		colorOpaque:'#dc322fba',
+		colorTransparent:'#dc322f42'
+	},
+	[ GREEN ]: {
+		colorOpaque:'#429900ba',
+		colorTransparent:'#45ff0042'
+	},
+	[ BLUE ]: {
+		colorOpaque:'#268bd2ba',
+		colorTransparent:'#268bd242'
+	}
+};
+
+// id: UUID. Represents what the current channel is to the client, and whether it has changed
+// type: STATIC | LIVESTREAM
+// source: relative path to hls-source/
+// ibeaconMinor: the minor value expected on an ibeacon for MULTICHANNEL-SPATIAL client mode
+// color: COLOR_MAP keys (YELLOW | RED | GREEN | BLUE)
+const createBroadcast = async ({
+	type,
+	source,
+	ibeaconMinor = null,
+	color
+}) => {
+	let duration = null;
+	let playbackTimer = null;
+
+	const setBroadcastDuration = async () => {
+		const sourceManifestPath = `hls-manifest/source/${source}`;
+		const sourceManifestData = await fs.readFile(`${__dirname}/${sourceManifestPath}`, 'utf8');
+		const sourceManifestLines = sourceManifestData.split('\n');
+		const broadcastDuration = sourceManifestLines
+			.filter(line => line.startsWith('#EXTINF:'))
+			.map(line => parseFloat(line.split(':')[1]))
+			.reduce((a, b) => a + b, 0);
+		duration = broadcastDuration;
+	};
+
+	const refresh = async (newSource = null) => {
+	  if (newSource) {
+		  if (newSource === source) {
+			  throw new Error("Cannot refresh; 'newSource' parameter is the same as the existing 'source'.");
+		  }
+
+		  source = newSource;
+	  }
+
+	  playbackTimer = null;
+	  await setBroadcastDuration();
+	};
+
+	const initialize = async () => {
+		if (!type) throw new Error("Cannot createBroadcast without 'type' parameter.");
+		if (![STATIC, LIVESTREAM].includes(type)) throw new Error(`Cannot createBroadcast; 'type' must be one of [${STATIC}, ${LIVESTREAM}]`);
+		if (!source) throw new Error("Cannot createBroadcast without 'source' parameter.");
+		if (!color) throw new Error("Cannot createBroadcast without 'color' parameter.");
+		if (!Object.keys(COLOR_MAP).includes(color)) {
+			throw new Error(`Cannot createBroadcast; 'color' parameter must be one of ${Object.keys(COLOR_MAP).join(', ')}`);
+		}
+
+		// Set broadcast duration if type STATIC
+		if (type === STATIC) {
+			await setBroadcastDuration();
+		}
+
+		return {
+			id: uuidv4(),
+			type,
+			source,
+			ibeaconMinor,
+			color,
+			duration,
+			playbackTimer,
+			refresh
+		};
+	};
+
+	return await initialize();
+};
 
 const getSourceManifestLines = async (channel) => {
   const sourceManifestPath = `hls-manifest/source/${channel}/${broadcasts[channel].source}`;
