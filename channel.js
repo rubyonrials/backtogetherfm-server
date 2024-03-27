@@ -6,6 +6,8 @@ const GREEN = 'green';
 const BLUE = 'blue';
 const YELLOW = 'yellow';
 
+// TODO playbackTimer should be long-lived, even if the server process dies. probably a light database
+
 // TODO: Eventually we will send color information to the client, when there are multiple channels available at once again
 // TODO: Why would server be responsible for setting the actual hex color values? So that client(s) does not have to be updated when a party wants to add a new/different color. Server is the easiest to update and control, esp in SDB land. Dumb client, even though it's strange setting hex values here
 const COLOR_MAP = {
@@ -36,9 +38,10 @@ const createChannel = async ({
 	source,
 	livestreaming,
 	ibeaconMinor = null,
-	color
+	colorGroup
 }) => {
 	let playbackTimer = null;
+	let duration = null;
 
 	const getManifestLines = async () => {
 		const manifestPath = `hls-data/${source}`;
@@ -47,16 +50,20 @@ const createChannel = async ({
 		return manifestLines;
 	};
 
-	// TODO: Could cache this for non-livestreaming files? So that when isExpired gets called (for every client calling /getStreamableChannels, and every time ensureBroadcasting starts a stream) we don't have to do a file read
-	const getDuration = async () => {
-		if (livestreaming) throw new Error("Did not expect getDuration to be called on a currently livestreaming channel.");
+	const setDuration = async () => {
+		if (livestreaming) throw new Error("Did not expect setDuration to be called on a currently livestreaming channel.");
 
-		const duration = await getManifestLines()
+		duration = (await getManifestLines())
 			.filter(line => line.startsWith('#EXTINF:'))
 			.map(line => parseFloat(line.split(':')[1]))
 			.reduce((a, b) => a + b, 0);
-		return duration;
 	};
+
+	const terminateLivestreaming = async () => {
+		livestreaming = false;
+		await setDuration();
+		cleanupBroadcast();
+	}
 
 	const getPlaybackOffset = () => {
 		if (!playbackTimer) throw new Error("Did not expect getPlaybackOffset to be called on a channel that is not broadcasting.");
@@ -65,28 +72,32 @@ const createChannel = async ({
 		return playbackOffset;
 	};
 
-	const isExpired = async () => {
+	const isExpired = () => {
 		if(!playbackTimer) return false;
 		if(livestreaming) return false; //TODO we need to eventually set this to false for livestreams
 
-		const duration = await getDuration();
 		const isExpired = getPlaybackOffset() >= duration;
 		return isExpired;
 	}
 
-	const ensureBroadcasting = async () => {
-		if ( playbackTimer !== null ) return;
-
-		playbackTimer = new Date();
+	const cleanupBroadcast = () => {
+		if (livestreaming) return;
+		if (!duration) throw new Error("cleanupBroadcast did not expect null duration on non-livestreaming broadcast");
 
 		setTimeout(() => {
-			if(!(await isExpired())) {
-				console.error("ensureBroadcasting cleanup expected expired broadcast."); // TODO why do we need this? is there a better way?
+			if(!isExpired()) {
+				throw new Error("cleanupBroadcast expected expired broadcast."); // TODO why do we need this? is there a better way?
 				return;
 			}
 
 			reset();
-		}, (await getDuration()) * 1000);
+		}, duration * 1000);
+	}
+
+	const ensureBroadcasting = () => {
+		if ( playbackTimer !== null ) return;
+		playbackTimer = new Date();
+		cleanupBroadcast();
 	};
 
 	const reset = (newSource = null) => {
@@ -104,9 +115,13 @@ const createChannel = async ({
 	const initialize = async () => {
 		if (!source) throw new Error("Cannot createChannel without 'source' parameter.");
 		if (livestreaming === undefined) throw new Error("Cannot createChannel without 'livestreaming' parameter.");
-		if (!color) throw new Error("Cannot createChannel without 'color' parameter.");
-		if (!Object.keys(COLOR_MAP).includes(color)) {
-			throw new Error(`Cannot createChannel; 'color' parameter must be one of ${Object.keys(COLOR_MAP).join(', ')}`);
+		if (!colorGroup) throw new Error("Cannot createChannel without 'colorGroup' parameter.");
+		if (!Object.keys(COLOR_MAP).includes(colorGroup)) {
+			throw new Error(`Cannot createChannel; 'colorGroup' parameter must be one of ${Object.keys(COLOR_MAP).join(', ')}`);
+		}
+
+		if (!livestreaming) {
+			await setDuration();
 		}
 
 		return {
@@ -114,15 +129,18 @@ const createChannel = async ({
 			source,
 			livestreaming,
 			ibeaconMinor,
-			color,
-			colorOpaque: COLOR_MAP[color].colorOpaque,
-			colorTransparent: COLOR_MAP[color].colorTransparent,
+			colorGroup,
+			colorOpaque: COLOR_MAP[colorGroup].colorOpaque,
+			colorTransparent: COLOR_MAP[colorGroup].colorTransparent,
 			getManifestLines,
 			getPlaybackOffset,
 			isExpired,
+			ensureBroadcasting,
 			reset
 		};
 	};
 
 	return await initialize();
 };
+
+module.exports = { createChannel };
