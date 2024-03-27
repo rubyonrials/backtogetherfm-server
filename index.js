@@ -38,14 +38,31 @@ app.get('/getStreamableChannels', async (req, res) => {
 });
 
 app.get('/:channelSourceName.m3u8', async (req, res) => {
+	const { sync } = req.query;
+	if (sync === undefined)
+		return res.sendFile(`hls-data/${req.params.channelSourceName}.m3u8`, { root: __dirname });
+
 	try {
 		const channel = channels.filter(channel => {
 			channel.source === `${req.params.channelSourceName}.m3u8`;
 		});
 
-		const manifestLines = await channel.getManifestLines();
-		// TODO TODO TODO
-		// This is where I am. I need to dynamically serve the manifest file, with a new EXT-X-START time as below. If it doesn't exist, add it. If it exists, overwrite it.
+		const sourceManifestLines = await channel.getManifestLines();
+		let syncedManifest = '';
+		await channel.ensureBroadcasting();
+		const playbackOffset = await channel.getPlaybackOffset();
+
+		for (let i = 0; i < sourceManifestLines.length; i++) {
+			if (sourceManifestLines[i] === '#EXT-X-VERSION:3') {
+				syncedManifest += sourceManifestLines[i] + '\n';
+				syncedManifest += `#EXT-X-START:TIME-OFFSET=${playbackOffset},PRECISE=YES\n`;
+			} else {
+				syncedManifest += sourceManifestLines[i] + '\n';
+			}
+		}
+
+		res.type('application/vnd.apple.mpegurl');
+		res.send(syncedManifest);
 	} catch (err) {
 		console.error('Internal server error: ', err);
 		res.status(500).send('Internal Server Error');
@@ -53,34 +70,34 @@ app.get('/:channelSourceName.m3u8', async (req, res) => {
 });
 
 // TODO delete this
-app.post('/stream/:channel', async (req, res) => {
-  const channel = req.params.channel;
-  if (!channel || (channel !== RED && channel !== GREEN && channel !== BLUE)) {
-    res.status(400).send(`${errorPrefix} Invalid channel parameter (must be one of 'red', 'green', 'blue').`);
-    return;
-  }
+// app.post('/stream/:channel', async (req, res) => {
+//   // const channel = req.params.channel;
+//   // if (!channel || (channel !== RED && channel !== GREEN && channel !== BLUE)) {
+//   //   res.status(400).send(`${errorPrefix} Invalid channel parameter (must be one of 'red', 'green', 'blue').`);
+//   //   return;
+//   // }
 
-  // Create a copy of the source manifest, with an up-to-date EXT-X-START playback offset for synchronization
-  const sourceManifestLines = await getSourceManifestLines(channel);
-  let clientManifest = '';
-  ensureBroadcasting(channel);
-  const playbackOffset = getPlaybackOffset(channel);
-  for (let i = 0; i < sourceManifestLines.length; i++) {
-    if (sourceManifestLines[i] === '#EXT-X-VERSION:3') {
-      clientManifest += sourceManifestLines[i] + '\n';
-      clientManifest += `#EXT-X-START:TIME-OFFSET=${playbackOffset},PRECISE=YES\n`;
-    } else {
-      clientManifest += sourceManifestLines[i] + '\n';
-    }
-  }
+//   // Create a copy of the source manifest, with an up-to-date EXT-X-START playback offset for synchronization
+//   const sourceManifestLines = await getSourceManifestLines(channel);
+//   let clientManifest = '';
+//   ensureBroadcasting(channel);
+//   const playbackOffset = getPlaybackOffset(channel);
+//   for (let i = 0; i < sourceManifestLines.length; i++) {
+//     if (sourceManifestLines[i] === '#EXT-X-VERSION:3') {
+//       clientManifest += sourceManifestLines[i] + '\n';
+//       clientManifest += `#EXT-X-START:TIME-OFFSET=${playbackOffset},PRECISE=YES\n`;
+//     } else {
+//       clientManifest += sourceManifestLines[i] + '\n';
+//     }
+//   }
 
-  // Write the new manifest to a file
-  const clientManifestFilename = `${channel}-${Math.round(playbackOffset)}-${uuidv4()}.m3u8`;
-  await fs.writeFile(`${__dirname}/hls-manifest/client/${clientManifestFilename}`, clientManifest);
-  res.send(clientManifestFilename);
-});
+//   // Write the new manifest to a file
+//   const clientManifestFilename = `${channel}-${Math.round(playbackOffset)}-${uuidv4()}.m3u8`;
+//   await fs.writeFile(`${__dirname}/hls-manifest/client/${clientManifestFilename}`, clientManifest);
+//   res.send(clientManifestFilename);
+// });
 
-app.use(express.static('hls-data'));
+// app.use(express.static('hls-data'));
 
 app.listen(PORT, () => {
   // refreshChannel(RED, 'bassinfusion.m3u8');

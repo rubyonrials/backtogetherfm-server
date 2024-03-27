@@ -49,6 +49,8 @@ const createChannel = async ({
 
 	// TODO: Could cache this for non-livestreaming files? So that when isExpired gets called (for every client calling /getStreamableChannels, and every time ensureBroadcasting starts a stream) we don't have to do a file read
 	const getDuration = async () => {
+		if (livestreaming) throw new Error("Did not expect getDuration to be called on a currently livestreaming channel.");
+
 		const duration = await getManifestLines()
 			.filter(line => line.startsWith('#EXTINF:'))
 			.map(line => parseFloat(line.split(':')[1]))
@@ -57,6 +59,8 @@ const createChannel = async ({
 	};
 
 	const getPlaybackOffset = () => {
+		if (!playbackTimer) throw new Error("Did not expect getPlaybackOffset to be called on a channel that is not broadcasting.");
+
 		let playbackOffset = (new Date() - playbackTimer) / 1000;
 		return playbackOffset;
 	};
